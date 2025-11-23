@@ -12,11 +12,12 @@ export class PeerManager {
     private hasSentKey: boolean = false;
     private processedReceivers = new WeakSet<RTCRtpReceiver>();
     private processedSenders = new WeakSet<RTCRtpSender>();
+
+    // Capability Flag
     private supportsE2EE = !!(window.RTCRtpSender && 'createEncodedStreams' in window.RTCRtpSender.prototype);
 
-    // NEW: Keep Alive Variables
+    // Wake Lock
     private wakeLock: any = null;
-    private audioCtx: AudioContext | null = null;
 
     public onRemoteStream: ((stream: MediaStream) => void) | null = null;
 
@@ -31,13 +32,11 @@ export class PeerManager {
             console.warn('[Talkr] Legacy Mode (No E2EE)');
         }
 
-        // Activate protections immediately
-        this.stayAlive();
+        // Activate Screen Wake Lock only (Silent)
+        this.requestWakeLock();
     }
 
-    // --- NEW: PREVENT BROWSER THROTTLING ---
-    private async stayAlive() {
-        // 1. Screen Wake Lock (Prevent screen off)
+    private async requestWakeLock() {
         if ('wakeLock' in navigator) {
             try {
                 this.wakeLock = await (navigator as any).wakeLock.request('screen');
@@ -45,32 +44,6 @@ export class PeerManager {
             } catch (err) {
                 console.warn('[Power] Wake Lock failed', err);
             }
-        }
-
-        // 2. The "Silent Audio" Hack (Prevent Background Throttling)
-        // Browsers throttle background tabs unless they are playing audio.
-        // We play a silent tone to trick the browser into giving us CPU.
-        try {
-            this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-
-            // Unlock AudioContext on first user interaction
-            const unlock = () => {
-                if (this.audioCtx?.state === 'suspended') {
-                    this.audioCtx.resume();
-                    const osc = this.audioCtx.createOscillator();
-                    const gain = this.audioCtx.createGain();
-                    gain.gain.value = 0.001; // Barely audible/silent
-                    osc.connect(gain);
-                    gain.connect(this.audioCtx.destination);
-                    osc.start();
-                    console.log('[Power] Background Throttling Disabled (Silent Audio Playing)');
-                }
-                document.removeEventListener('click', unlock);
-            };
-            document.addEventListener('click', unlock);
-            document.addEventListener('touchstart', unlock);
-        } catch (e) {
-            console.error('[Power] Audio Hack failed', e);
         }
     }
 
@@ -95,6 +68,7 @@ export class PeerManager {
         this.localStream.getTracks().forEach(track => {
             const sender = this.pc!.addTrack(track, this.localStream!);
 
+            // Attach Encryption Pipe immediately if supported
             if (this.supportsE2EE && track.kind === 'video') {
                 if (this.processedSenders.has(sender)) return;
                 this.processedSenders.add(sender);
@@ -128,8 +102,6 @@ export class PeerManager {
         draw();
         const stream = canvas.captureStream(30);
         const audioCtx = new AudioContext();
-        const resumeAudio = () => { if (audioCtx.state === 'suspended') audioCtx.resume(); };
-        document.body.addEventListener('click', resumeAudio);
         const osc = audioCtx.createOscillator();
         const dst = audioCtx.createMediaStreamDestination();
         osc.connect(dst); osc.start();
@@ -197,7 +169,7 @@ export class PeerManager {
             switch (data.type) {
                 case 'ready':
                     const pubKey = await this.crypto.exportPublicKey();
-                    this.send({ type: 'key-exchange', key: pubKey, roomId: this.roomId, supportsE2EE: this.supportsE2EE });
+                    this.send({ type: 'key-exchange', key: pubKey, roomId: this.roomId });
                     this.hasSentKey = true;
                     break;
 
@@ -207,7 +179,7 @@ export class PeerManager {
 
                     if (!this.hasSentKey) {
                         const myKey = await this.crypto.exportPublicKey();
-                        this.send({ type: 'key-exchange', key: myKey, roomId: this.roomId, supportsE2EE: this.supportsE2EE });
+                        this.send({ type: 'key-exchange', key: myKey, roomId: this.roomId });
                         this.hasSentKey = true;
 
                         const offer = await this.pc.createOffer();
