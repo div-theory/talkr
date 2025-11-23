@@ -8,7 +8,9 @@ export class PeerManager {
     private localStream: MediaStream | null = null;
     private crypto: CryptoEngine;
     private e2ee: E2EETransformer;
-    private isDummyStream: boolean = false;
+
+    // State to prevent handshake loops
+    private hasSentKey: boolean = false;
 
     public onRemoteStream: ((stream: MediaStream) => void) | null = null;
 
@@ -23,8 +25,7 @@ export class PeerManager {
     private initPeerConnection(iceConfig: any) {
         console.log('[WebRTC] Initializing PC with Config:', iceConfig);
 
-        // --- FIX: FORCE INSERTABLE STREAMS CONFIG ---
-        // This prevents "Too late to create encoded streams" error
+        // Force Insertable Streams to prevent "Too Late" errors
         const config = {
             ...iceConfig,
             encodedInsertableStreams: true
@@ -47,7 +48,6 @@ export class PeerManager {
 
             if (track.kind === 'video') {
                 try {
-                    // Force cast to any because TS definitions might lag behind standard
                     const streams = (sender as any).createEncodedStreams();
                     const transformStream = this.e2ee.senderTransform();
                     streams.readable
@@ -60,6 +60,7 @@ export class PeerManager {
         });
     }
 
+    // Fallback for testing without camera
     private getDummyStream(): MediaStream {
         const canvas = document.createElement('canvas');
         canvas.width = 640; canvas.height = 480;
@@ -114,7 +115,6 @@ export class PeerManager {
             if (event.track.kind === 'video') {
                 try {
                     const receiver = event.receiver;
-                    // The fix in initPeerConnection should allow this to work now
                     const streams = (receiver as any).createEncodedStreams();
                     const transformStream = this.e2ee.receiverTransform();
                     streams.readable.pipeThrough(transformStream).pipeTo(streams.writable);
@@ -139,25 +139,42 @@ export class PeerManager {
 
             switch (data.type) {
                 case 'ready':
+                    // I am the Host (first peer). I initiate the Key Exchange.
                     const pubKey = await this.crypto.exportPublicKey();
                     this.send({ type: 'key-exchange', key: pubKey, roomId: this.roomId });
+                    this.hasSentKey = true;
                     break;
+
                 case 'key-exchange':
+                    // I received a key.
                     const peerKey = await this.crypto.importPeerKey(data.key);
                     await this.crypto.deriveSharedSecret(peerKey);
-                    const offer = await this.pc.createOffer();
-                    await this.pc.setLocalDescription(offer);
-                    this.send({ type: 'offer', sdp: offer, roomId: this.roomId });
+
+                    // CRITICAL FIX: If I haven't sent my key yet (I am the Guest), I must reply now!
+                    if (!this.hasSentKey) {
+                        console.log('[WebRTC] Replying with my Public Key...');
+                        const myKey = await this.crypto.exportPublicKey();
+                        this.send({ type: 'key-exchange', key: myKey, roomId: this.roomId });
+                        this.hasSentKey = true;
+
+                        // Since I am the Guest (second to join), I also initiate the Offer
+                        const offer = await this.pc.createOffer();
+                        await this.pc.setLocalDescription(offer);
+                        this.send({ type: 'offer', sdp: offer, roomId: this.roomId });
+                    }
                     break;
+
                 case 'offer':
                     await this.pc.setRemoteDescription(data.sdp);
                     const answer = await this.pc.createAnswer();
                     await this.pc.setLocalDescription(answer);
                     this.send({ type: 'answer', sdp: answer, roomId: this.roomId });
                     break;
+
                 case 'answer':
                     await this.pc.setRemoteDescription(data.sdp);
                     break;
+
                 case 'ice':
                     await this.pc.addIceCandidate(data.candidate);
                     break;
