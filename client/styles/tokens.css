@@ -1,0 +1,25 @@
+:root {
+    /* Colors */
+    --bg-light: #FFFFFF;
+    --bg-dark: #000000;
+    --accent-blue: #0A66FF;
+    --muted-stroke-light: rgba(0, 0, 0, 0.06);
+    --muted-stroke-dark: rgba(255, 255, 255, 0.06);
+
+    /* Typography - Assuming fonts are loaded via <link> in HTML */
+    --font-display: 'General Sans', sans-serif;
+    --font-body: 'General Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+
+    /* Shapes */
+    --radius-card: 6px;
+    --radius-pill: 9999px;
+    --radius-sharp: 0px;
+
+    /* Spacing */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+}

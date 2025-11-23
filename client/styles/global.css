@@ -1,0 +1,64 @@
+@import './tokens.css';
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-body);
+    background-color: var(--bg-light);
+    color: var(--bg-dark);
+    -webkit-font-smoothing: antialiased;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* FORCE APP CONTAINER TO FULL SIZE */
+#app {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+/* STRICT UI RULES implementation */
+button.btn {
+    appearance: none;
+    border: 1px solid var(--muted-stroke-light);
+    background: transparent;
+    border-radius: var(--radius-pill);
+    padding: var(--space-sm) var(--space-lg);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+button.btn:hover {
+    background: var(--muted-stroke-light);
+}
+
+button.btn-primary {
+    background-color: var(--accent-blue);
+    color: white;
+    border: none;
+}
+
+button.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.card {
+    border: 1px solid var(--muted-stroke-light);
+    border-radius: var(--radius-card);
+    background: var(--bg-light);
+    padding: var(--space-lg);
+}

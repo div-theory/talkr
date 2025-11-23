@@ -1,0 +1,14 @@
+[Unit]
+Description=Talkr Signaling Server
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/talkr/server
+ExecStart=/usr/bin/node -r ts-node/register server.ts
+Restart=always
+Environment=TURN_SECRET=YOUR_SECURE_SECRET_HERE
+Environment=TURN_URL=turn:your-oracle-ip:3478
+
+[Install]
+WantedBy=multi-user.target
