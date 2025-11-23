@@ -4,61 +4,149 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
 }
 
 body {
-    font-family: var(--font-body);
-    background-color: var(--bg-light);
-    color: var(--bg-dark);
-    -webkit-font-smoothing: antialiased;
+    background-color: var(--bg-deep);
+    color: var(--primary);
+    font-family: var(--font-main);
+    overflow: hidden;
     width: 100vw;
     height: 100vh;
-    overflow: hidden;
 }
 
-/* FORCE APP CONTAINER TO FULL SIZE */
-#app {
-    width: 100vw;
-    height: 100vh;
-    position: relative;
-    overflow: hidden;
+/* --- UTILITIES --- */
+
+/* Technical Grid Background */
+.grid-bg {
+    background-size: 40px 40px;
+    background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    position: absolute;
+    inset: 0;
+    z-index: -1;
 }
 
-/* STRICT UI RULES implementation */
-button.btn {
+/* Glassmorphism Panel */
+.glass {
+    background: var(--glass-panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Animations */
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse-green {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 255, 148, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 255, 148, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 255, 148, 0);
+    }
+}
+
+/* --- COMPONENTS --- */
+
+/* Modern Button */
+.btn {
     appearance: none;
-    border: 1px solid var(--muted-stroke-light);
-    background: transparent;
-    border-radius: var(--radius-pill);
-    padding: var(--space-sm) var(--space-lg);
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 14px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--primary);
+    border-radius: var(--radius-full);
+    padding: 12px 24px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     cursor: pointer;
-    transition: background 0.2s ease;
-    display: inline-flex;
+    transition: all 0.3s var(--ease-out);
+    display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    justify-content: center;
+    gap: 8px;
 }
 
-button.btn:hover {
-    background: var(--muted-stroke-light);
+.btn:hover {
+    background: var(--primary);
+    color: var(--bg-deep);
+    border-color: var(--primary);
+    transform: translateY(-1px);
 }
 
-button.btn-primary {
-    background-color: var(--accent-blue);
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 20px;
+}
+
+.btn-danger {
+    background: rgba(255, 68, 68, 0.1);
+    border-color: rgba(255, 68, 68, 0.3);
+    color: var(--signal-red);
+}
+
+.btn-danger:hover {
+    background: var(--signal-red);
     color: white;
-    border: none;
+    border-color: var(--signal-red);
 }
 
-button.btn-primary:hover {
-    opacity: 0.9;
+.btn-active {
+    background: var(--primary);
+    color: var(--bg-deep);
 }
 
-.card {
-    border: 1px solid var(--muted-stroke-light);
-    border-radius: var(--radius-card);
-    background: var(--bg-light);
-    padding: var(--space-lg);
+/* Status Badge */
+.badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--secondary);
+}
+
+.dot.online {
+    background-color: var(--signal-green);
+    box-shadow: 0 0 8px var(--signal-green);
+    animation: pulse-green 2s infinite;
 }

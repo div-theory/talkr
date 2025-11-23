@@ -1,8 +1,7 @@
 import './styles/global.css';
 import { PeerManager } from './webrtc/peerManager';
 
-// CONFIGURATION
-// REPLACE WITH YOUR RENDER URL
+// CONFIG: REPLACE WITH YOUR RENDER URL
 const PROD_SIGNALING_URL = 'wss://talkr-server.onrender.com';
 
 const getSignalingUrl = () => {
@@ -12,7 +11,6 @@ const getSignalingUrl = () => {
     return PROD_SIGNALING_URL;
 };
 
-// UI State
 const appState = {
     manager: null as PeerManager | null,
     isMuted: false,
@@ -21,80 +19,147 @@ const appState = {
 
 const appContainer = document.getElementById('app') as HTMLDivElement;
 
+// --- VIDEO FACTORY ---
 function createVideoElement(isLocal: boolean): HTMLVideoElement {
     const vid = document.createElement('video');
     vid.autoplay = true; vid.playsInline = true;
     if (isLocal) vid.muted = true;
 
-    vid.style.borderRadius = 'var(--radius-card)';
-    vid.style.border = '1px solid var(--muted-stroke-light)';
     vid.style.backgroundColor = '#000';
 
     if (isLocal) {
-        vid.style.width = '120px'; vid.style.height = 'auto';
-        vid.style.position = 'absolute'; vid.style.bottom = '100px'; vid.style.right = '24px';
-        vid.style.zIndex = '10'; vid.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        // Floating Local Pip
+        vid.style.width = '140px';
+        vid.style.height = 'auto';
+        vid.style.aspectRatio = '16/9';
+        vid.style.position = 'absolute';
+        vid.style.bottom = '110px';
+        vid.style.right = '24px';
+        vid.style.zIndex = '10';
+        vid.style.borderRadius = '12px';
+        vid.style.border = '1px solid rgba(255,255,255,0.1)';
+        vid.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
         vid.style.transition = 'all 0.3s ease';
+        vid.style.objectFit = 'cover';
     } else {
-        vid.style.objectFit = 'cover'; vid.style.width = '100%'; vid.style.height = '100%';
+        // Full Screen Remote
+        vid.style.objectFit = 'cover';
+        vid.style.width = '100%';
+        vid.style.height = '100%';
     }
     return vid;
 }
 
+// --- CALL INTERFACE ---
 async function startCall(roomId: string) {
-    appContainer.innerHTML = ''; appContainer.style.backgroundColor = '#000';
+    appContainer.innerHTML = '';
 
-    // Videos
-    const remoteVideo = createVideoElement(false); appContainer.appendChild(remoteVideo);
-    const localVideo = createVideoElement(true); appContainer.appendChild(localVideo);
+    // 1. Remote Video Layer
+    const remoteVideo = createVideoElement(false);
+    appContainer.appendChild(remoteVideo);
 
-    // Status
-    const statusOverlay = document.createElement('div');
-    statusOverlay.style.position = 'absolute'; statusOverlay.style.top = '50%'; statusOverlay.style.left = '50%';
-    statusOverlay.style.transform = 'translate(-50%, -50%)';
-    statusOverlay.style.color = 'rgba(255,255,255,0.4)'; statusOverlay.style.fontFamily = 'var(--font-mono)';
-    statusOverlay.innerText = 'SECURE LINKING...';
-    appContainer.appendChild(statusOverlay);
+    // 2. Grid Overlay (Subtle texture over video)
+    const grid = document.createElement('div');
+    grid.className = 'grid-bg';
+    grid.style.opacity = '0.1'; // Very subtle over video
+    appContainer.appendChild(grid);
 
-    // Top Info Bar
-    const topBar = document.createElement('div');
-    topBar.style.position = 'absolute'; topBar.style.top = '24px'; topBar.style.left = '24px'; topBar.style.zIndex = '20';
-    topBar.innerHTML = `
-    <div class="card" style="padding: 8px 16px; display: flex; gap: 12px; align-items: center; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);">
-      <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 700;">${roomId}</span>
-      <div style="width: 1px; height: 12px; background: rgba(0,0,0,0.1);"></div>
-      <button class="btn" id="copyBtn" style="border: none; padding: 0; font-size: 11px; height: auto;">COPY LINK</button>
-    </div>
+    // 3. Local Video Layer
+    const localVideo = createVideoElement(true);
+    appContainer.appendChild(localVideo);
+
+    // 4. Header Bar (Glass)
+    const header = document.createElement('div');
+    header.style.position = 'absolute';
+    header.style.top = '24px';
+    header.style.left = '24px';
+    header.style.right = '24px';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.zIndex = '20';
+
+    // Logo + Room ID
+    const infoBadge = document.createElement('div');
+    infoBadge.className = 'glass badge';
+    infoBadge.innerHTML = `
+    <span class="dot" id="statusDot"></span>
+    <span style="opacity: 0.7;">ID:</span>
+    <span style="font-weight: 700;">${roomId}</span>
   `;
-    appContainer.appendChild(topBar);
-    document.getElementById('copyBtn')?.addEventListener('click', (e) => {
+
+    // Encryption Status
+    const encryptBadge = document.createElement('div');
+    encryptBadge.className = 'glass badge';
+    encryptBadge.innerHTML = `
+    <span style="font-size: 14px;">🔒</span>
+    <span>E2EE SECURE</span>
+  `;
+
+    header.appendChild(infoBadge);
+    header.appendChild(encryptBadge);
+    appContainer.appendChild(header);
+
+    // 5. Status Overlay (Centered Text)
+    const statusText = document.createElement('div');
+    statusText.style.position = 'absolute';
+    statusText.style.top = '50%';
+    statusText.style.left = '50%';
+    statusText.style.transform = 'translate(-50%, -50%)';
+    statusText.style.fontFamily = 'var(--font-mono)';
+    statusText.style.fontSize = '14px';
+    statusText.style.letterSpacing = '2px';
+    statusText.style.color = 'rgba(255,255,255,0.5)';
+    statusText.style.textTransform = 'uppercase';
+    statusText.innerHTML = `Waiting for Peer <span style="animation: blink 1s infinite">...</span>`;
+    appContainer.appendChild(statusText);
+
+    // 6. Bottom Controls Dock (Glass)
+    const dock = document.createElement('div');
+    dock.className = 'glass';
+    dock.style.position = 'absolute';
+    dock.style.bottom = '32px';
+    dock.style.left = '50%';
+    dock.style.transform = 'translateX(-50%)';
+    dock.style.padding = '12px 24px';
+    dock.style.borderRadius = '24px';
+    dock.style.display = 'flex';
+    dock.style.gap = '16px';
+    dock.style.zIndex = '20';
+    dock.style.animation = 'fade-in-up 0.5s ease-out';
+
+    dock.innerHTML = `
+    <button id="copyBtn" class="btn btn-icon" title="Copy Link">🔗</button>
+    <button id="vidBtn" class="btn btn-icon btn-active" title="Toggle Video">📷</button>
+    <button id="muteBtn" class="btn btn-icon btn-active" title="Toggle Mic">🎤</button>
+    <div style="width: 1px; background: var(--glass-border); margin: 0 8px;"></div>
+    <button id="endBtn" class="btn btn-icon btn-danger" title="End Call">✕</button>
+  `;
+    appContainer.appendChild(dock);
+
+    // --- EVENT LOGIC ---
+
+    // Copy
+    document.getElementById('copyBtn')?.addEventListener('click', () => {
         navigator.clipboard.writeText(window.location.href);
-        (e.target as HTMLElement).innerText = 'COPIED';
+        statusText.innerText = 'LINK COPIED TO CLIPBOARD';
+        statusText.style.opacity = '1';
+        setTimeout(() => statusText.innerText = '', 2000);
     });
 
-    // Bottom Control Bar
-    const controls = document.createElement('div');
-    controls.style.position = 'absolute'; controls.style.bottom = '32px';
-    controls.style.left = '50%'; controls.style.transform = 'translateX(-50%)';
-    controls.style.zIndex = '20';
-    controls.style.display = 'flex'; controls.style.gap = '16px';
+    // End
+    document.getElementById('endBtn')?.addEventListener('click', () => window.location.href = '/');
 
-    controls.innerHTML = `
-    <button id="muteBtn" class="btn" style="background: rgba(255,255,255,0.9); width: 48px; height: 48px; border-radius: 50%; padding: 0; justify-content: center;">MIC</button>
-    <button id="endBtn" class="btn" style="background: #FF3333; color: white; width: 48px; height: 48px; border-radius: 50%; padding: 0; justify-content: center; border: none;">X</button>
-    <button id="vidBtn" class="btn" style="background: rgba(255,255,255,0.9); width: 48px; height: 48px; border-radius: 50%; padding: 0; justify-content: center;">CAM</button>
-  `;
-    appContainer.appendChild(controls);
-
-    // START ENGINE
+    // Start Engine
     const signalUrl = getSignalingUrl();
     appState.manager = new PeerManager(roomId, signalUrl);
 
     appState.manager.onRemoteStream = (stream) => {
         remoteVideo.srcObject = stream;
-        statusOverlay.innerText = 'ENCRYPTED';
-        statusOverlay.style.opacity = '0';
-        setTimeout(() => statusOverlay.remove(), 1000);
+        statusText.style.display = 'none';
+        document.getElementById('statusDot')?.classList.add('online');
+        encryptBadge.style.borderColor = 'var(--signal-green)';
+        encryptBadge.style.color = 'var(--signal-green)';
     };
 
     try {
@@ -102,49 +167,68 @@ async function startCall(roomId: string) {
         const localStream = appState.manager.getLocalStream();
         if (localStream) localVideo.srcObject = localStream;
 
-        // Button Logic
-        document.getElementById('endBtn')?.addEventListener('click', () => {
-            window.location.href = '/';
-        });
-
+        // Mute/Video Toggles
         document.getElementById('muteBtn')?.addEventListener('click', (e) => {
-            if (!localStream) return;
-            const track = localStream.getAudioTracks()[0];
+            const btn = e.target as HTMLElement;
+            const track = localStream?.getAudioTracks()[0];
             if (track) {
                 appState.isMuted = !appState.isMuted;
                 track.enabled = !appState.isMuted;
-                (e.target as HTMLElement).style.background = appState.isMuted ? '#ffcccc' : 'rgba(255,255,255,0.9)';
-                (e.target as HTMLElement).style.textDecoration = appState.isMuted ? 'line-through' : 'none';
+                btn.classList.toggle('btn-active');
+                btn.innerHTML = appState.isMuted ? '🔇' : '🎤';
             }
         });
 
         document.getElementById('vidBtn')?.addEventListener('click', (e) => {
-            if (!localStream) return;
-            const track = localStream.getVideoTracks()[0];
+            const btn = e.target as HTMLElement;
+            const track = localStream?.getVideoTracks()[0];
             if (track) {
                 appState.isVideoOff = !appState.isVideoOff;
                 track.enabled = !appState.isVideoOff;
-                (e.target as HTMLElement).style.background = appState.isVideoOff ? '#ffcccc' : 'rgba(255,255,255,0.9)';
-                (e.target as HTMLElement).style.textDecoration = appState.isVideoOff ? 'line-through' : 'none';
+                btn.classList.toggle('btn-active');
+                btn.innerHTML = appState.isVideoOff ? '🚫' : '📷';
             }
         });
 
     } catch (e) {
-        statusOverlay.innerText = 'CONNECTION ERROR';
-        statusOverlay.style.color = '#FF3333';
+        statusText.innerText = 'CONNECTION ERROR';
+        statusText.style.color = 'var(--signal-red)';
     }
 }
 
+// --- LANDING INTERFACE ---
 function renderHome() {
     appContainer.innerHTML = `
-      <main style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
-        <h1 style="font-size: 48px; font-weight: 700; margin-bottom: 24px;">TALKR</h1>
-        <div class="card" style="width: 320px; text-align: center; padding: 32px;">
-          <p style="margin-bottom: 24px; font-family: var(--font-mono); font-size: 11px; color: #666; text-transform: uppercase;">End-to-End Encrypted / Peer-to-Peer</p>
-          <button id="createBtn" class="btn btn-primary" style="width: 100%; justify-content: center;">START MEETING &rarr;</button>
+    <div class="grid-bg"></div>
+    <main style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; position: relative; z-index: 1;">
+      
+      <div style="margin-bottom: 48px; text-align: center; animation: fade-in-up 0.8s ease-out;">
+        <h1 style="font-size: 64px; font-weight: 700; letter-spacing: -3px; margin-bottom: 8px; background: linear-gradient(to bottom, #fff, #888); -webkit-background-clip: text; color: transparent;">TALKR.</h1>
+        <p style="font-family: var(--font-mono); color: var(--secondary); font-size: 14px; letter-spacing: 1px;">PRIVATE P2P PROTOCOL</p>
+      </div>
+
+      <div class="glass" style="padding: 40px; border-radius: 24px; width: 360px; text-align: center; animation: fade-in-up 1s ease-out;">
+        <div style="margin-bottom: 32px;">
+            <div style="display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 6px 12px; background: rgba(0,255,148,0.1); border-radius: 20px; color: var(--signal-green); font-size: 12px; font-weight: 600;">
+                <span>●</span> ONLINE
+            </div>
+            <p style="color: #ccc; line-height: 1.6; font-size: 14px;">
+                End-to-End Encrypted video calls. <br/>
+                No signup. No tracking. No logs.
+            </p>
         </div>
-      </main>
+
+        <button id="createBtn" class="btn" style="width: 100%; height: 56px; font-size: 14px;">
+            Initialize Meeting <span style="margin-left: 8px">→</span>
+        </button>
+      </div>
+
+      <div style="position: absolute; bottom: 32px; font-family: var(--font-mono); font-size: 11px; color: var(--secondary); opacity: 0.5;">
+        ENCRYPTION: AES-GCM-256 / X25519
+      </div>
+    </main>
   `;
+
     document.getElementById('createBtn')?.addEventListener('click', () => {
         const randomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         window.history.pushState({}, '', `?m=${randomId}`);
@@ -154,4 +238,5 @@ function renderHome() {
 
 const urlParams = new URLSearchParams(window.location.search);
 const meetingId = urlParams.get('m');
-if (meetingId) startCall(meetingId); else renderHome();
+if (meetingId) startCall(meetingId);
+else renderHome();

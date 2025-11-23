@@ -1,25 +1,27 @@
 :root {
-    /* Colors */
-    --bg-light: #FFFFFF;
-    --bg-dark: #000000;
-    --accent-blue: #0A66FF;
-    --muted-stroke-light: rgba(0, 0, 0, 0.06);
-    --muted-stroke-dark: rgba(255, 255, 255, 0.06);
+    /* Palette */
+    --bg-deep: #050505;
+    --bg-surface: #111111;
 
-    /* Typography - Assuming fonts are loaded via <link> in HTML */
-    --font-display: 'General Sans', sans-serif;
-    --font-body: 'General Sans', sans-serif;
+    --glass-panel: rgba(20, 20, 20, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.08);
+
+    --primary: #FFFFFF;
+    --secondary: #888888;
+
+    --signal-green: #00FF94;
+    --signal-red: #FF4444;
+    --signal-blue: #2E95FF;
+
+    /* Typography */
+    --font-main: 'General Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'DM Mono', monospace;
 
-    /* Shapes */
-    --radius-card: 6px;
-    --radius-pill: 9999px;
-    --radius-sharp: 0px;
+    /* Shape */
+    --radius-sm: 8px;
+    --radius-md: 16px;
+    --radius-full: 9999px;
 
-    /* Spacing */
-    --space-xs: 4px;
-    --space-sm: 8px;
-    --space-md: 16px;
-    --space-lg: 24px;
-    --space-xl: 32px;
+    /* Animation */
+    --ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
 }
