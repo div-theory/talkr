@@ -9,8 +9,10 @@ export class PeerManager {
     private crypto: CryptoEngine;
     private e2ee: E2EETransformer;
 
-    // State to prevent handshake loops
     private hasSentKey: boolean = false;
+    // NEW: Track which receivers we have already set up to prevent double-init errors
+    private processedReceivers = new WeakSet<RTCRtpReceiver>();
+    private processedSenders = new WeakSet<RTCRtpSender>();
 
     public onRemoteStream: ((stream: MediaStream) => void) | null = null;
 
@@ -25,7 +27,6 @@ export class PeerManager {
     private initPeerConnection(iceConfig: any) {
         console.log('[WebRTC] Initializing PC with Config:', iceConfig);
 
-        // Force Insertable Streams to prevent "Too Late" errors
         const config = {
             ...iceConfig,
             encodedInsertableStreams: true
@@ -44,9 +45,22 @@ export class PeerManager {
         if (!this.pc || !this.localStream) return;
 
         this.localStream.getTracks().forEach(track => {
-            const sender = this.pc!.addTrack(track, this.localStream!);
+            // Check if track is already added to avoid duplication logic
+            const senders = this.pc!.getSenders();
+            const alreadyHasTrack = senders.find(s => s.track === track);
+
+            let sender: RTCRtpSender;
+            if (alreadyHasTrack) {
+                sender = alreadyHasTrack;
+            } else {
+                sender = this.pc!.addTrack(track, this.localStream!);
+            }
 
             if (track.kind === 'video') {
+                // PREVENT DOUBLE ENCRYPTION SETUP
+                if (this.processedSenders.has(sender)) return;
+                this.processedSenders.add(sender);
+
                 try {
                     const streams = (sender as any).createEncodedStreams();
                     const transformStream = this.e2ee.senderTransform();
@@ -60,7 +74,6 @@ export class PeerManager {
         });
     }
 
-    // Fallback for testing without camera
     private getDummyStream(): MediaStream {
         const canvas = document.createElement('canvas');
         canvas.width = 640; canvas.height = 480;
@@ -113,13 +126,19 @@ export class PeerManager {
 
         this.pc.ontrack = (event) => {
             if (event.track.kind === 'video') {
-                try {
-                    const receiver = event.receiver;
-                    const streams = (receiver as any).createEncodedStreams();
-                    const transformStream = this.e2ee.receiverTransform();
-                    streams.readable.pipeThrough(transformStream).pipeTo(streams.writable);
-                } catch (e) {
-                    console.error('E2EE receiver setup failed:', e);
+                const receiver = event.receiver;
+
+                // --- FIX: PREVENT DOUBLE DECRYPTION SETUP ---
+                if (!this.processedReceivers.has(receiver)) {
+                    this.processedReceivers.add(receiver);
+
+                    try {
+                        const streams = (receiver as any).createEncodedStreams();
+                        const transformStream = this.e2ee.receiverTransform();
+                        streams.readable.pipeThrough(transformStream).pipeTo(streams.writable);
+                    } catch (e) {
+                        console.error('E2EE receiver setup failed:', e);
+                    }
                 }
             }
             if (this.onRemoteStream) this.onRemoteStream(event.streams[0]);
@@ -139,25 +158,20 @@ export class PeerManager {
 
             switch (data.type) {
                 case 'ready':
-                    // I am the Host (first peer). I initiate the Key Exchange.
                     const pubKey = await this.crypto.exportPublicKey();
                     this.send({ type: 'key-exchange', key: pubKey, roomId: this.roomId });
                     this.hasSentKey = true;
                     break;
 
                 case 'key-exchange':
-                    // I received a key.
                     const peerKey = await this.crypto.importPeerKey(data.key);
                     await this.crypto.deriveSharedSecret(peerKey);
 
-                    // CRITICAL FIX: If I haven't sent my key yet (I am the Guest), I must reply now!
                     if (!this.hasSentKey) {
-                        console.log('[WebRTC] Replying with my Public Key...');
                         const myKey = await this.crypto.exportPublicKey();
                         this.send({ type: 'key-exchange', key: myKey, roomId: this.roomId });
                         this.hasSentKey = true;
 
-                        // Since I am the Guest (second to join), I also initiate the Offer
                         const offer = await this.pc.createOffer();
                         await this.pc.setLocalDescription(offer);
                         this.send({ type: 'offer', sdp: offer, roomId: this.roomId });
