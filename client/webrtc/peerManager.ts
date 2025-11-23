@@ -10,9 +10,11 @@ export class PeerManager {
     private e2ee: E2EETransformer;
 
     private hasSentKey: boolean = false;
-    // NEW: Track which receivers we have already set up to prevent double-init errors
     private processedReceivers = new WeakSet<RTCRtpReceiver>();
     private processedSenders = new WeakSet<RTCRtpSender>();
+
+    // FEATURE FLAG: Check if browser supports E2EE Insertable Streams
+    private supportsE2EE = !!(window.RTCRtpSender && 'createEncodedStreams' in window.RTCRtpSender.prototype);
 
     public onRemoteStream: ((stream: MediaStream) => void) | null = null;
 
@@ -22,14 +24,19 @@ export class PeerManager {
         this.e2ee = new E2EETransformer(this.crypto);
         this.ws = new WebSocket(signalingUrl);
         this.setupSignaling();
+
+        if (!this.supportsE2EE) {
+            console.warn('[Talkr] Browser does not support Insertable Streams. Falling back to Standard Encryption.');
+        }
     }
 
     private initPeerConnection(iceConfig: any) {
-        console.log('[WebRTC] Initializing PC with Config:', iceConfig);
+        console.log('[WebRTC] Initializing PC. E2EE Supported:', this.supportsE2EE);
 
+        // Only enable Insertable Streams if the browser actually supports it
         const config = {
             ...iceConfig,
-            encodedInsertableStreams: true
+            encodedInsertableStreams: this.supportsE2EE
         };
 
         this.pc = new RTCPeerConnection(config);
@@ -45,7 +52,6 @@ export class PeerManager {
         if (!this.pc || !this.localStream) return;
 
         this.localStream.getTracks().forEach(track => {
-            // Check if track is already added to avoid duplication logic
             const senders = this.pc!.getSenders();
             const alreadyHasTrack = senders.find(s => s.track === track);
 
@@ -56,8 +62,8 @@ export class PeerManager {
                 sender = this.pc!.addTrack(track, this.localStream!);
             }
 
-            if (track.kind === 'video') {
-                // PREVENT DOUBLE ENCRYPTION SETUP
+            // ONLY ATTEMPT E2EE IF SUPPORTED
+            if (this.supportsE2EE && track.kind === 'video') {
                 if (this.processedSenders.has(sender)) return;
                 this.processedSenders.add(sender);
 
@@ -89,7 +95,11 @@ export class PeerManager {
         };
         draw();
         const stream = canvas.captureStream(30);
+        // Audio Context Resume Hack
         const audioCtx = new AudioContext();
+        const resumeAudio = () => { if (audioCtx.state === 'suspended') audioCtx.resume(); };
+        document.body.addEventListener('click', resumeAudio);
+
         const osc = audioCtx.createOscillator();
         const dst = audioCtx.createMediaStreamDestination();
         osc.connect(dst); osc.start();
@@ -128,10 +138,9 @@ export class PeerManager {
             if (event.track.kind === 'video') {
                 const receiver = event.receiver;
 
-                // --- FIX: PREVENT DOUBLE DECRYPTION SETUP ---
-                if (!this.processedReceivers.has(receiver)) {
+                // ONLY ATTEMPT E2EE IF SUPPORTED
+                if (this.supportsE2EE && !this.processedReceivers.has(receiver)) {
                     this.processedReceivers.add(receiver);
-
                     try {
                         const streams = (receiver as any).createEncodedStreams();
                         const transformStream = this.e2ee.receiverTransform();
