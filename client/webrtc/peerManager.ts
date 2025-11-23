@@ -16,16 +16,21 @@ export class PeerManager {
         this.roomId = roomId;
         this.crypto = new CryptoEngine();
         this.e2ee = new E2EETransformer(this.crypto);
-
         this.ws = new WebSocket(signalingUrl);
         this.setupSignaling();
     }
 
     private initPeerConnection(iceConfig: any) {
-        console.log('[WebRTC] Initializing PC with ICE Config:', iceConfig);
+        console.log('[WebRTC] Initializing PC with Config:', iceConfig);
 
-        // iceConfig comes from server already formatted as { iceServers: [...] }
-        this.pc = new RTCPeerConnection(iceConfig);
+        // --- FIX: FORCE INSERTABLE STREAMS CONFIG ---
+        // This prevents "Too late to create encoded streams" error
+        const config = {
+            ...iceConfig,
+            encodedInsertableStreams: true
+        };
+
+        this.pc = new RTCPeerConnection(config);
 
         this.setupPeerEvents();
 
@@ -42,13 +47,14 @@ export class PeerManager {
 
             if (track.kind === 'video') {
                 try {
+                    // Force cast to any because TS definitions might lag behind standard
                     const streams = (sender as any).createEncodedStreams();
                     const transformStream = this.e2ee.senderTransform();
                     streams.readable
                         .pipeThrough(transformStream)
                         .pipeTo(streams.writable);
                 } catch (e) {
-                    console.error('E2EE not supported/failed:', e);
+                    console.error('E2EE sender setup failed:', e);
                 }
             }
         });
@@ -108,10 +114,13 @@ export class PeerManager {
             if (event.track.kind === 'video') {
                 try {
                     const receiver = event.receiver;
+                    // The fix in initPeerConnection should allow this to work now
                     const streams = (receiver as any).createEncodedStreams();
                     const transformStream = this.e2ee.receiverTransform();
                     streams.readable.pipeThrough(transformStream).pipeTo(streams.writable);
-                } catch (e) { console.error('Decryption failed', e); }
+                } catch (e) {
+                    console.error('E2EE receiver setup failed:', e);
+                }
             }
             if (this.onRemoteStream) this.onRemoteStream(event.streams[0]);
         };
